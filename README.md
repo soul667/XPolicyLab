@@ -25,6 +25,7 @@ Start here for repo-level concepts and integration steps. For install commands, 
 ## 📚 Contents
 
 - [What XPolicyLab Enables](#-what-xpolicylab-enables)
+- [Data Studio](#-data-studio)
 - [Supported Benchmarks And Infrastructure](#-supported-benchmarks-and-infrastructure)
 - [Integrated Policies](#-integrated-policies)
 - [Framework Overview](#-framework-overview)
@@ -44,6 +45,10 @@ Start here for repo-level concepts and integration steps. For install commands, 
 - **A common adapter contract**: use the same high-level lifecycle for installation, data conversion, training, serving, and evaluation.
 - **A large policy zoo**: reuse adapters for VLA/WAM policies, imitation-learning baselines, and reference templates.
 - **Benchmark and infra integration**: mount XPolicyLab into benchmark or simulator workspaces without coupling policy code to one environment.
+
+## 📊 Data Studio
+
+The optional [Data Studio](tools/data-studio/README.md) is a standalone React + Ant Design frontend for reviewing and filtering multi-camera robotics trajectories. It synchronizes head, left-wrist, and right-wrist videos, supports frame-level navigation, and exports keep/review/reject decisions without uploading dataset files.
 
 ## 🌐 Supported Benchmarks And Infrastructure
 
