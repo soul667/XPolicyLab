@@ -14,6 +14,39 @@ bash install.sh
 conda activate <policy_env>  # e.g. dp
 ```
 
+### Docker
+
+The same image contains the dependencies for data processing, training, and
+policy-server inference. Build it locally from the repository root:
+
+```bash
+docker build -f policy/DP/Dockerfile -t xpolicylab-dp:local .
+```
+
+The GitHub Actions workflow publishes merged `main` builds to
+`ghcr.io/soul667/xpolicylab-dp:latest`. Mount data and checkpoints at the
+repository paths expected by the existing DP scripts:
+
+```bash
+docker run --rm -it --gpus all \
+  -v "$PWD/data:/workspace/XPolicyLab/data" \
+  -v "$PWD/checkpoints:/workspace/XPolicyLab/checkpoints" \
+  ghcr.io/soul667/xpolicylab-dp:latest
+```
+
+Inside the container, the working directory is `policy/DP` and the `dp`
+Conda environment is already on `PATH`. Run `process_data.sh` / `train.sh`
+normally. For a standalone inference server, expose its websocket port and
+pass `dp` as the policy environment:
+
+```bash
+docker run --rm --gpus all -p 8765:8765 \
+  -v "$PWD/checkpoints:/workspace/XPolicyLab/checkpoints:ro" \
+  ghcr.io/soul667/xpolicylab-dp:latest \
+  bash setup_eval_policy_server.sh \
+    RoboDojo stack_bowls cotrain arx_x5 joint 0 0 dp 8765 0.0.0.0
+```
+
 ## Data Processing
 
 Reads raw demos from `data/<bench_name>/<ckpt_name>/<env_cfg_type>` and produces the zarr dataset `data/<bench_name>-<ckpt_name>-<env_cfg_type>-<action_type>.zarr` consumed by `train.sh`. The only extra argument is the optional `[expert_data_num]` episode limit:
