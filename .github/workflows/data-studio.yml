@@ -1,0 +1,38 @@
+name: Data Studio
+
+on:
+  pull_request:
+    paths:
+      - "tools/data-studio/**"
+      - ".github/workflows/data-studio.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/data-studio/**"
+      - ".github/workflows/data-studio.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/data-studio
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/data-studio/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
