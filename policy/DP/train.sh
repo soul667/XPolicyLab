@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 bench_name=${1}
 ckpt_name=${2} # run name
@@ -22,7 +23,7 @@ action_dim=$(bash "${UTILS_DIR}/get_action_dim.sh" "${ROOT_DIR}" "${env_cfg_type
 
 alg_name=robot_dp
 
-if [ $DEBUG = True ]; then
+if [ "$DEBUG" = True ]; then
     wandb_mode=offline
     echo -e "\033[33mDebug mode!\033[0m"
     echo -e "\033[33mDebug mode!\033[0m"
@@ -39,7 +40,7 @@ data_setting="${bench_name}-${ckpt_name}-${env_cfg_type}-${action_type}"
 zarr_path="data/${data_setting}.zarr"
 
 if [ ! -d "${zarr_path}" ]; then
-    bash process_data.sh ${bench_name} ${ckpt_name} ${env_cfg_type} ${action_type}
+    bash process_data.sh "${bench_name}" "${ckpt_name}" "${env_cfg_type}" "${action_type}"
 fi
 
 python train.py --config-name="${alg_name}.yaml" \
@@ -48,9 +49,9 @@ python train.py --config-name="${alg_name}.yaml" \
                 "task.shape_meta.action.shape=[${action_dim}]" \
                 "task.shape_meta.obs.agent_pos.shape=[${action_dim}]" \
                 task.dataset.zarr_path="${zarr_path}" \
-                training.debug=$DEBUG \
-                training.seed=${seed} \
+                training.debug="${DEBUG}" \
+                training.seed="${seed}" \
                 training.device="cuda:0" \
-                exp_name=${exp_name} \
-                logging.mode=${wandb_mode} \
-                setting=${env_cfg_type}
+                exp_name="${exp_name}" \
+                logging.mode="${wandb_mode}" \
+                setting="${env_cfg_type}"

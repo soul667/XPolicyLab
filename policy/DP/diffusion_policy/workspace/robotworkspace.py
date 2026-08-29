@@ -17,6 +17,7 @@ import copy
 
 import tqdm, random
 import numpy as np
+import wandb
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
@@ -82,12 +83,19 @@ class RobotWorkspace(BaseWorkspace):
             self.ema_model.set_normalizer(normalizer)
 
         # configure lr scheduler
+        train_batches_per_epoch = len(train_dataloader)
+        if cfg.training.max_train_steps is not None:
+            train_batches_per_epoch = min(train_batches_per_epoch, cfg.training.max_train_steps)
+        num_training_steps = (
+            train_batches_per_epoch * cfg.training.num_epochs
+        ) // cfg.training.gradient_accumulate_every
+        num_training_steps = max(num_training_steps, 1)
+
         lr_scheduler = get_scheduler(
             cfg.training.lr_scheduler,
             optimizer=self.optimizer,
             num_warmup_steps=cfg.training.lr_warmup_steps,
-            num_training_steps=(len(train_dataloader) * cfg.training.num_epochs) //
-            cfg.training.gradient_accumulate_every,
+            num_training_steps=num_training_steps,
             # pytorch assumes stepping LRScheduler every epoch
             # however huggingface diffusers steps it every batch
             last_epoch=self.global_step - 1,
@@ -107,16 +115,12 @@ class RobotWorkspace(BaseWorkspace):
         env_runner = None
 
         # configure logging
-        # wandb_run = wandb.init(
-        #     dir=str(self.output_dir),
-        #     config=OmegaConf.to_container(cfg, resolve=True),
-        #     **cfg.logging
-        # )
-        # wandb.config.update(
-        #     {
-        #         "output_dir": self.output_dir,
-        #     }
-        # )
+        wandb_run = wandb.init(
+            dir=str(self.output_dir),
+            config=OmegaConf.to_container(cfg, resolve=True),
+            **cfg.logging,
+        )
+        wandb.config.update({"output_dir": self.output_dir})
 
         # configure checkpoint
         topk_manager = TopKCheckpointManager(save_dir=os.path.join(self.output_dir, "checkpoints"),
@@ -189,14 +193,21 @@ class RobotWorkspace(BaseWorkspace):
                             "lr": lr_scheduler.get_last_lr()[0],
                         }
 
-                        is_last_batch = batch_idx == (len(train_dataloader) - 1)
-                        if not is_last_batch:
+                        reached_max_train_steps = (
+                            cfg.training.max_train_steps is not None
+                            and batch_idx >= (cfg.training.max_train_steps - 1)
+                        )
+                        is_last_train_batch = (
+                            batch_idx == (len(train_dataloader) - 1)
+                            or reached_max_train_steps
+                        )
+                        if not is_last_train_batch:
                             # log of last step is combined with validation and rollout
                             json_logger.log(step_log)
+                            wandb_run.log(step_log, step=self.global_step)
                             self.global_step += 1
 
-                        if (cfg.training.max_train_steps
-                                is not None) and batch_idx >= (cfg.training.max_train_steps - 1):
+                        if reached_max_train_steps:
                             break
 
                 # at the end of each epoch
@@ -228,7 +239,7 @@ class RobotWorkspace(BaseWorkspace):
                         ) as tepoch:
                             for batch_idx, batch in enumerate(tepoch):
                                 batch = dataset.postprocess(batch, device)
-                                loss = self.model.compute_loss(batch)
+                                loss = policy.compute_loss(batch)
                                 val_losses.append(loss)
                                 if (cfg.training.max_val_steps
                                         is not None) and batch_idx >= (cfg.training.max_val_steps - 1):
@@ -239,7 +250,7 @@ class RobotWorkspace(BaseWorkspace):
                             step_log["val_loss"] = val_loss
 
                 # run diffusion sampling on a training batch
-                if (self.epoch % cfg.training.sample_every) == 0:
+                if ((self.epoch + 1) % cfg.training.sample_every) == 0:
                     with torch.no_grad():
                         # sample trajectory from training set, and evaluate difference
                         batch = train_sampling_batch
@@ -272,8 +283,11 @@ class RobotWorkspace(BaseWorkspace):
                 # end of epoch
                 # log of last step is combined with validation and rollout
                 json_logger.log(step_log)
+                wandb_run.log(step_log, step=self.global_step)
                 self.global_step += 1
                 self.epoch += 1
+
+        wandb_run.finish()
 
 
 class BatchSampler:
