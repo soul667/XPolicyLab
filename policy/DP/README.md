@@ -24,24 +24,41 @@ docker build -f policy/DP/Dockerfile -t xpolicylab-dp:local .
 ```
 
 The GitHub Actions workflow publishes merged `main` builds to
-`ghcr.io/soul667/xpolicylab-dp:latest`. Mount data and checkpoints at the
-repository paths expected by the existing DP scripts:
+`ghcr.io/soul667/xpolicylab-dp:latest`. To run the code baked into that image,
+mount processed data and checkpoints at the paths used by the DP adapter:
 
 ```bash
 docker run --rm -it --gpus all \
-  -v "$PWD/data:/workspace/XPolicyLab/data" \
-  -v "$PWD/checkpoints:/workspace/XPolicyLab/checkpoints" \
+  -v "$PWD/data:/workspace/XPolicyLab/policy/DP/data" \
+  -v "$PWD/checkpoints:/workspace/XPolicyLab/policy/DP/checkpoints" \
   ghcr.io/soul667/xpolicylab-dp:latest
 ```
 
 Inside the container, the working directory is `policy/DP` and the `dp`
 Conda environment is already on `PATH`. Run `process_data.sh` / `train.sh`
-normally. For a standalone inference server, expose its websocket port and
-pass `dp` as the policy environment:
+normally.
+
+To test repository changes without rebuilding the image, bind mount the
+checkout over the same path. The image uses editable installs rooted at
+`/workspace/XPolicyLab`, so Python immediately imports the mounted code:
+
+```bash
+# Run from the XPolicyLab repository root.
+docker run --rm -it --gpus all --shm-size=32g \
+  -w /workspace/XPolicyLab/policy/DP \
+  -v "$PWD:/workspace/XPolicyLab" \
+  -v "/path/to/dp-data:/workspace/XPolicyLab/policy/DP/data" \
+  -v "/path/to/dp-checkpoints:/workspace/XPolicyLab/policy/DP/checkpoints" \
+  ghcr.io/soul667/xpolicylab-dp:latest
+```
+
+Mount raw RoboDojo/RoboTwin exports separately at `/workspace/data` when
+running `process_data.sh`. For a standalone inference server, expose its
+websocket port and pass `dp` as the policy environment:
 
 ```bash
 docker run --rm --gpus all -p 8765:8765 \
-  -v "$PWD/checkpoints:/workspace/XPolicyLab/checkpoints:ro" \
+  -v "$PWD/checkpoints:/workspace/XPolicyLab/policy/DP/checkpoints:ro" \
   ghcr.io/soul667/xpolicylab-dp:latest \
   bash setup_eval_policy_server.sh \
     RoboDojo stack_bowls cotrain arx_x5 joint 0 0 dp 8765 0.0.0.0
@@ -89,4 +106,7 @@ bash eval.sh RoboDojo stack_bowls RoboDojo-cotrain-arx_x5-joint-0 arx_x5 joint 0
 
 ## Configuration
 
-`deploy.yml` keys to check before evaluation: `checkpoint_num`.
+The default observation is multi-camera: `head_cam`, `left_cam`, and
+`right_cam`, plus the low-dimensional `agent_pos`. Each camera uses its own
+ResNet-18 because `share_rgb_model` defaults to `false`. `deploy.yml` keys to
+check before evaluation: `checkpoint_num`.
